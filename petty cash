@@ -1,0 +1,538 @@
+{
+  "type": "Foreach",
+  "foreach": "@outputs('Select_Approver_Emails')['body']",
+  "actions": {
+    "Condition": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@variables('isRejected')",
+              false
+            ]
+          },
+          {
+            "equals": [
+              "@variables('isTimedOut')",
+              false
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "Start_and_wait_for_an_approval": {
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "parameters": {
+              "approvalType": "Basic",
+              "WebhookApprovalCreationInput/title": "Petty Cash Request for @{body('Get_item')?['Title']} Project",
+              "WebhookApprovalCreationInput/assignedTo": "@{items('For_each')}",
+              "WebhookApprovalCreationInput/details": "Dear Mr./Mrs. @{outputs('Get_user_profile_(V2)')?['body/displayName']},\n\nI am writing to request your approval for a petty cash disbursement. Please find the details below and the attachment for your review.\n\n__Date:__ @{body('Get_item')?['RequestDate']}\n__Requester:__ @{outputs('Get_item')?['body/Requester/DisplayName']} (@{outputs('Get_item')?['body/Requester/Email']})\n__Project Name:__ @{body('Get_item')?['Title']}\n__Job Code:__ @{outputs('Get_item')?['body/JobCode']}\n__Total Cost:__ Rp@{formatNumber(body('Get_item')?['TotalCost'], '#,##0.00', 'id-ID')}\n\nHere is the detail of Line Items:\n\n@{variables('lineItemsTable')}\n\nApproval history:\n\n@{variables('approvalHistory')}\n\nThank you for your attention to this matter.\n\nBest regards,\n\n@{body('Update_item')?['Requester']?['DisplayName']}",
+              "WebhookApprovalCreationInput/enableNotifications": true,
+              "WebhookApprovalCreationInput/enableReassignment": true
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+              "connection": "shared_approvals",
+              "operationId": "StartAndWaitForAnApproval"
+            }
+          },
+          "runAfter": {
+            "Append_to_string_variable_approval_history": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "2be0d156-ef9d-4a1a-a86d-cee42f10fd41"
+          }
+        },
+        "Condition_Approved_or_Not": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@body('Start_and_wait_for_an_approval')?['outcome']",
+                  "Approve"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Increment_totalApprovers": {
+              "type": "IncrementVariable",
+              "inputs": {
+                "name": "totalApprovers",
+                "value": 1
+              },
+              "runAfter": {
+                "Set_variable_approval_notes": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a5b7bc79-00ed-4883-b8f4-736b13606999"
+              }
+            },
+            "Condition_Loop_Finished_or_Not": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('totalApprovers')",
+                      "@length(body('Select_Approver_Emails'))"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Update_item_Status_Approvedd": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+                      "table": "0515f31c-658c-42af-877a-5bfa30511156",
+                      "id": "@body('Get_item')?['ID']",
+                      "item/Status/Value": "Approved",
+                      "item/DecisionsTaken": "@variables('totalApprovers')"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connection": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5f6710cb-280a-4c94-a121-f7e63340a60f"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Condition_Check_Directur_or_Not": {
+                    "type": "If",
+                    "expression": {
+                      "or": [
+                        {
+                          "equals": [
+                            "@outputs('Get_user_profile_(V2)')?['body/displayName']",
+                            "Chee Hou Koh"
+                          ]
+                        },
+                        {
+                          "equals": [
+                            "@outputs('Get_user_profile_(V2)')?['body/userPrincipalName']",
+                            "ch.koh@piee.co.id"
+                          ]
+                        },
+                        {
+                          "equals": [
+                            "@outputs('Get_user_profile_(V2)')?['body/userPrincipalName']",
+                            "lita@piee.co.id"
+                          ]
+                        },
+                        {
+                          "equals": [
+                            "@outputs('Get_user_profile_(V2)')?['body/displayName']",
+                            "Meylita Hukom"
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Update_item_Status_Approved": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+                            "table": "0515f31c-658c-42af-877a-5bfa30511156",
+                            "id": "@body('Get_item')?['ID']",
+                            "item/Status/Value": "Approved"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                            "connection": "shared_sharepointonline",
+                            "operationId": "PatchItem"
+                          }
+                        },
+                        "metadata": {
+                          "operationMetadataId": "5f6710cb-280a-4c94-a121-f7e63340a60f"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    },
+                    "metadata": {
+                      "operationMetadataId": "82cd18e6-afb6-45da-ba77-8c2fd36d3cd6"
+                    }
+                  },
+                  "Set_variable_approverName": {
+                    "type": "SetVariable",
+                    "inputs": {
+                      "name": "approverName",
+                      "value": "@outputs('Get_user_profile_(V2)')?['body/displayName']"
+                    },
+                    "runAfter": {
+                      "Condition_Check_Directur_or_Not": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "3ea272bd-0790-4507-85f0-cf99e33eb708"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Create_item_for_Approval_Logs": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "c78c6ba2-fe56-4ab3-a3b0-a2131f0e5d59"
+              }
+            },
+            "Set_variable_approval_datetime": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "aprrovalDatetime",
+                "value": "@{formatDateTime(addHours(first(body('Start_and_wait_for_an_approval')?['responses'])?['responseDate'], 7), 'yyyy-MM-ddTHH:mm:ss')\n}"
+              },
+              "metadata": {
+                "operationMetadataId": "e63a4472-a36b-4804-84f3-d9d7be74a3e9"
+              }
+            },
+            "Create_item_for_Approval_Logs": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+                  "table": "02ebcde5-4212-4ae1-a9ff-decd00f4ec0d",
+                  "item/Title": "@body('Get_item')?['Title']",
+                  "item/ReportID": "@body('Get_item')?['ReportID']",
+                  "item/PIC/Claims": "@body('Get_item')?['PIC']?['Claims']",
+                  "item/Requester/Claims": "@body('Get_item')?['Requester']?['Claims']",
+                  "item/ApproverName/Claims": "@outputs('Get_user_profile_(V2)')?['body/displayName']",
+                  "item/ApproverPosition": "@outputs('Get_user_profile_(V2)')?['body/jobTitle']",
+                  "item/Outcome/Value": "@body('Start_and_wait_for_an_approval')?['outcome']",
+                  "item/DecisionStep": "@variables('totalApprovers')",
+                  "item/TotalDecisionStep": "@outputs('Compose_Length_Approvers')",
+                  "item/ApprovalDatetime": "@formatDateTime(addHours(first(body('Start_and_wait_for_an_approval')?['responses'])?['responseDate'], 7), 'yyyy-MM-ddTHH:mm:ss')",
+                  "item/Notes": "--------------------------------------\n🟢 Approved by @{outputs('Get_user_profile_(V2)')?['body/displayName']}\nComments (if any): @{outputs('Start_and_wait_for_an_approval')?['body']?['responses'][0]?['comments']}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connection": "shared_sharepointonline",
+                  "operationId": "PostItem"
+                }
+              },
+              "runAfter": {
+                "Increment_totalApprovers": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "65e4dcc8-06c0-4aee-ad49-18873debd393"
+              }
+            },
+            "Set_variable_approval_notes": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "approvalNotes",
+                "value": "@{outputs('Start_and_wait_for_an_approval')?['body']?['responses'][0]?['comments']}"
+              },
+              "runAfter": {
+                "Set_variable_approval_datetime": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "fd2a879c-182f-4ee2-a04c-25d23a53fe80"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Update_item_Rejected": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "parameters": {
+                    "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+                    "table": "0515f31c-658c-42af-877a-5bfa30511156",
+                    "id": "@body('Get_item')?['ID']",
+                    "item/AssignedApprovalTo/Claims": "@outputs('Get_user_profile_(V2)')?['body/displayName']",
+                    "item/Status/Value": "Rejected",
+                    "item/DecisionsTaken": "@variables('totalApprovers')"
+                  },
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                    "connection": "shared_sharepointonline",
+                    "operationId": "PatchItem"
+                  }
+                },
+                "runAfter": {
+                  "Increment_totalApprovers_II": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "operationMetadataId": "fd1dbf8b-1037-427d-8bd7-1a48c72b9423"
+                }
+              },
+              "Set_variable_isRejected": {
+                "type": "SetVariable",
+                "inputs": {
+                  "name": "isRejected",
+                  "value": true
+                },
+                "runAfter": {
+                  "Update_item_Rejected": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "operationMetadataId": "8e43d11c-c928-4952-9c6a-63aff60751e6"
+                }
+              },
+              "Increment_totalApprovers_II": {
+                "type": "IncrementVariable",
+                "inputs": {
+                  "name": "totalApprovers",
+                  "value": 1
+                },
+                "metadata": {
+                  "operationMetadataId": "12aa21b9-8c55-41e9-8b21-db52e6a265ee"
+                }
+              },
+              "Send_an_email_from_a_shared_mailbox_(V2)": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "parameters": {
+                    "emailMessage/MailboxAddress": "it-request@piee.co.id",
+                    "emailMessage/To": "@trim(join(outputs('Compose_Slice_Notif_Rejected_Emails'), ';'))",
+                    "emailMessage/Subject": "Petty Cash Request Rejected [@{triggerBody()?['text']}]",
+                    "emailMessage/Body": "<p>Dear All,</p>\n    \n<p>We hope this email finds you well. We regret to inform you that the approval for the following report has been rejected:</p>\n\n<p>Report ID: @{triggerBody()?['text']}<br>\nProject Name: @{outputs('Get_item')?['body/Title']}<br>\nJob Code: @{outputs('Get_item')?['body/JobCode']}<br>\nPIC: @{outputs('Get_item')?['body/PIC']?['DisplayName']}<br>\nRequester: @{outputs('Get_item')?['body/Requester']?['DisplayName']}</p>\n\n<p class=\"highlight\">🔴 Rejected by @{outputs('Get_user_profile_(V2)')?['body/displayName']} (@{outputs('Get_user_profile_(V2)')?['body/userPrincipalName']})</p>\n\n<p>Comments (if any): @{outputs('Start_and_wait_for_an_approval')?['body/responses'][0]?['comments']}</p>\n\n<p>Please review the feedback provided by the approvers for detailed reasons and any required actions to address the issues. Thank you for your understanding and cooperation.</p>\n\n<p>Best regards,</p>\n\n<p>IT Team</p>",
+                    "emailMessage/Importance": "Normal"
+                  },
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                    "connection": "shared_office365",
+                    "operationId": "SharedMailboxSendEmailV2"
+                  }
+                },
+                "runAfter": {
+                  "Compose_Slice_Notif_Rejected_Emails": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "operationMetadataId": "d7f4a65f-b7bf-47ad-9e94-c5c740626e4f"
+                }
+              },
+              "Compose_Slice_Notif_Rejected_Emails": {
+                "type": "Compose",
+                "inputs": "@take(body('Select_Approver_Emails'), variables('totalApprovers'))",
+                "runAfter": {
+                  "Create_item_for_Approval_Logs-Reject": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "operationMetadataId": "f116b64a-8e53-4365-9b98-585c31cfae56"
+                }
+              },
+              "Create_item_for_Approval_Logs-Reject": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "parameters": {
+                    "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+                    "table": "02ebcde5-4212-4ae1-a9ff-decd00f4ec0d",
+                    "item/Title": "@body('Get_item')?['Title']",
+                    "item/ReportID": "@body('Get_item')?['ReportID']",
+                    "item/PIC/Claims": "@body('Get_item')?['PIC']?['Claims']",
+                    "item/Requester/Claims": "@body('Get_item')?['Requester']?['Claims']",
+                    "item/ApproverName/Claims": "@outputs('Get_user_profile_(V2)')?['body/displayName']",
+                    "item/ApproverPosition": "@outputs('Get_user_profile_(V2)')?['body/jobTitle']",
+                    "item/Outcome/Value": "@body('Start_and_wait_for_an_approval')?['outcome']",
+                    "item/DecisionStep": "@variables('totalApprovers')",
+                    "item/TotalDecisionStep": "@outputs('Compose_Length_Approvers')",
+                    "item/ApprovalDatetime": "@{formatDateTime(addHours(first(body('Start_and_wait_for_an_approval')?['responses'])?['responseDate'], 7), 'yyyy-MM-ddTHH:mm:ss')}",
+                    "item/Notes": "--------------------------------------\n🔴 Rejected by @{outputs('Get_user_profile_(V2)')?['body/displayName']}\nComments (if any): @{outputs('Start_and_wait_for_an_approval')?['body']?['responses'][0]?['comments']}"
+                  },
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                    "connection": "shared_sharepointonline",
+                    "operationId": "PostItem"
+                  }
+                },
+                "runAfter": {
+                  "Set_variable_isRejected": [
+                    "Succeeded"
+                  ]
+                },
+                "metadata": {
+                  "operationMetadataId": "fa627ded-507f-4e20-82db-1cf4db53f909"
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Start_and_wait_for_an_approval": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "6cc00962-c2db-4f8f-838d-95570b3ffc69"
+          }
+        },
+        "Get_user_profile_(V2)": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "id": "@items('For_each')"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+              "connection": "shared_office365users",
+              "operationId": "UserProfile_V2"
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "29eff2a3-e562-4b3c-a0ac-4e600fc51dd4"
+          }
+        },
+        "Update_item": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+              "table": "0515f31c-658c-42af-877a-5bfa30511156",
+              "id": "@body('Get_item')?['ID']",
+              "item/AssignedApprovalTo/Claims": "@outputs('Get_user_profile_(V2)')?['body/displayName']",
+              "item/Status/Value": "Pending",
+              "item/DecisionsTaken": "@variables('totalApprovers')"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connection": "shared_sharepointonline",
+              "operationId": "PatchItem"
+            }
+          },
+          "runAfter": {
+            "Get_user_profile_(V2)": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "0506906d-9c0a-4367-8a54-235fe53f9f9c"
+          }
+        },
+        "Append_to_string_variable_approval_history": {
+          "type": "AppendToStringVariable",
+          "inputs": {
+            "name": "approvalHistory",
+            "value": "\n| @{variables('approverName')} | @{variables('aprrovalDatetime')} | @{variables('approvalNotes')}"
+          },
+          "runAfter": {
+            "Update_item": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "b0967034-2ff6-4ea5-bc85-f667628c99d8"
+          }
+        },
+        "Set_variable_isTimedOut": {
+          "type": "SetVariable",
+          "inputs": {
+            "name": "isTimedOut",
+            "value": true
+          },
+          "runAfter": {
+            "Start_and_wait_for_an_approval": [
+              "TimedOut"
+            ]
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Condition_Check_isRejected": {
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@variables('isRejected')",
+                    "@true"
+                  ]
+                }
+              ]
+            },
+            "actions": {},
+            "else": {
+              "actions": {
+                "Get_user_profile_(V2)-copy": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "id": "@items('For_each')"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                      "connection": "shared_office365users",
+                      "operationId": "UserProfile_V2"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "29eff2a3-e562-4b3c-a0ac-4e600fc51dd4"
+                  }
+                },
+                "Update_item_Timed_Out": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "https://pieetheactivators.sharepoint.com/sites/ITTeam2",
+                      "table": "0515f31c-658c-42af-877a-5bfa30511156",
+                      "id": "@body('Get_item')?['ID']",
+                      "item/AssignedApprovalTo/Claims": "@outputs('Get_user_profile_(V2)-copy')?['body/displayName']",
+                      "item/Status/Value": "Timed Out",
+                      "item/DecisionsTaken": "@variables('totalApprovers')"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connection": "shared_sharepointonline",
+                      "operationId": "PatchItem"
+                    }
+                  },
+                  "runAfter": {
+                    "Get_user_profile_(V2)-copy": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "fd1dbf8b-1037-427d-8bd7-1a48c72b9423"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "operationMetadataId": "b846084e-6902-4ab6-91b1-946c90064aad"
+      }
+    }
+  },
+  "runAfter": {
+    "Initialize_isTimedOut": [
+      "Succeeded"
+    ]
+  },
+  "metadata": {
+    "operationMetadataId": "40c8a7f4-3c61-423a-814e-40c6bb0deb3d"
+  }
+}
